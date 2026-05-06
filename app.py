@@ -13,9 +13,9 @@ from config import (
     ACCENT_COLOR,
     DEMO_NAME,
     MAX_QUERIES_PER_SESSION,
+    QDRANT_API_KEY,
     QDRANT_COLLECTION,
-    QDRANT_HOST,
-    QDRANT_PORT,
+    QDRANT_URL,
 )
 from rag.generator import generate
 from rag.retriever import retrieve
@@ -37,11 +37,14 @@ _DOC_DESCRIPTIONS: dict[str, str] = {
 def _collection_has_points() -> bool:
     """Return True if the Qdrant collection exists and contains at least one point."""
     try:
-        client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+        client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
         info = client.get_collection(QDRANT_COLLECTION)
         return (info.points_count or 0) > 0
-    except (UnexpectedResponse, Exception):
+    except UnexpectedResponse:
         return False
+    except Exception:
+        st.error("Knowledge base unavailable — please try again.")
+        st.stop()
 
 
 def _run_ingestion() -> None:
