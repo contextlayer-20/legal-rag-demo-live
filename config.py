@@ -1,8 +1,11 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Qdrant
-QDRANT_HOST = os.environ.get("QDRANT_HOST", "qdrant")   # Docker service name; override for local dev
-QDRANT_PORT = 6333
+QDRANT_URL = os.environ.get("QDRANT_URL", "")
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY", "")
 QDRANT_COLLECTION = "legal-docs"
 
 # Groq

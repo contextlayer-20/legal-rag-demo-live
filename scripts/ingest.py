@@ -34,12 +34,12 @@ DOCS_DIR = Path(__file__).parent.parent / "docs"
 def get_qdrant_client() -> QdrantClient:
     """Connect to Qdrant and return the client."""
     try:
-        client = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
+        client = QdrantClient(url=config.QDRANT_URL, api_key=config.QDRANT_API_KEY)
         client.get_collections()
         return client
     except Exception as e:
-        log.error("Cannot connect to Qdrant at %s:%s — %s", config.QDRANT_HOST, config.QDRANT_PORT, e)
-        log.error("Is Qdrant running? Start it with: docker-compose up qdrant")
+        log.error("Cannot connect to Qdrant at %s — %s", config.QDRANT_URL, e)
+        log.error("Check QDRANT_URL and QDRANT_API_KEY in your .env file.")
         sys.exit(1)
 
 

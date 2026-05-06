@@ -14,9 +14,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
     EMBEDDING_MODEL,
-    QDRANT_HOST,
-    QDRANT_PORT,
+    QDRANT_API_KEY,
     QDRANT_COLLECTION,
+    QDRANT_URL,
     TOP_K,
 )
 
@@ -38,7 +38,7 @@ def _get_qdrant_client() -> QdrantClient:
     """Return a cached QdrantClient instance."""
     global _qdrant_client
     if _qdrant_client is None:
-        _qdrant_client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+        _qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
     return _qdrant_client
 
 
@@ -63,8 +63,8 @@ def retrieve(query: str, top_k: int = TOP_K) -> list[dict]:
     except (UnexpectedResponse, ConnectionError, Exception) as exc:
         logger.error("Qdrant search failed: %s", exc)
         raise RuntimeError(
-            f"Could not connect to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}. "
-            "Is Qdrant running?"
+            f"Could not connect to Qdrant at {QDRANT_URL}. "
+            "Check QDRANT_URL and QDRANT_API_KEY."
         ) from exc
 
     chunks = []
