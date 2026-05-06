@@ -24,8 +24,7 @@ CHUNK_OVERLAP = 64
 TOP_K = 5
 
 # Demo limits
-MAX_QUERIES_PER_SESSION = 0     # 0 = no limit (local/GitHub demo)
-                                # Set to 10 for hosted/public demo
+MAX_QUERIES_PER_SESSION = 10    # 10 for hosted/public demo (cost protection)
 
 # Branding
 DEMO_NAME = "Legal Document Q&A"
