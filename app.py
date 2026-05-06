@@ -84,9 +84,6 @@ def _apply_styles() -> None:
         [data-testid="stChatInputContainer"] {{
             border-top: 1px solid #1a2535;
         }}
-        [data-testid="stBottomBlockContainer"] {{
-            padding-right: calc(33.333% + 1.5rem) !important;
-        }}
         [data-testid="stExpander"] {{
             background-color: #0f1923;
             border: 1px solid #1a2535 !important;
@@ -202,6 +199,7 @@ def main() -> None:
         page_title=f"ContextLayer — {DEMO_NAME}",
         page_icon="⚖️",
         layout="wide",
+        initial_sidebar_state="collapsed",
     )
     _apply_styles()
     _init_session_state()
@@ -228,75 +226,72 @@ def main() -> None:
         and st.session_state.query_count >= MAX_QUERIES_PER_SESSION
     )
 
+    with st.sidebar:
+        _render_document_library()
+
     typed_question = (
         st.chat_input("Ask a question about the legal documents…")
         if not limit_reached
         else None
     )
 
-    col_chat, col_docs = st.columns([2, 1])
+    _render_history()
 
-    with col_docs:
-        _render_document_library()
+    if limit_reached:
+        st.warning(
+            "Demo query limit reached. "
+            "Contact ContextLayer to discuss your use case."
+        )
+    else:
+        question = None
 
-    with col_chat:
-        _render_history()
+        if st.session_state.pending_question:
+            question = st.session_state.pending_question
+            st.session_state.pending_question = None
 
-        if limit_reached:
-            st.warning(
-                "Demo query limit reached. "
-                "Contact ContextLayer to discuss your use case."
+        if len(st.session_state.messages) == 0 and not question:
+            _suggested = [
+                "What are the confidentiality obligations in the NDA?",
+                "Who owns IP created during the engagement?",
+                "What are the payment terms in the service agreement?",
+                "What grounds allow early termination of the employment contract?",
+            ]
+            for _q in _suggested:
+                if st.button(_q):
+                    st.session_state.pending_question = _q
+                    st.rerun()
+
+        question = question or typed_question
+
+        if question:
+            st.session_state.messages.append(
+                {"role": "user", "content": question}
             )
-        else:
-            question = None
+            with st.chat_message("user"):
+                st.markdown(question)
 
-            if st.session_state.pending_question:
-                question = st.session_state.pending_question
-                st.session_state.pending_question = None
+            chunks = retrieve(question)
 
-            if len(st.session_state.messages) == 0 and not question:
-                _suggested = [
-                    "What are the confidentiality obligations in the NDA?",
-                    "Who owns IP created during the engagement?",
-                    "What are the payment terms in the service agreement?",
-                    "What grounds allow early termination of the employment contract?",
-                ]
-                for _q in _suggested:
-                    if st.button(_q):
-                        st.session_state.pending_question = _q
-                        st.rerun()
-
-            question = question or typed_question
-
-            if question:
+            if not chunks:
+                answer = "No relevant content found in the knowledge base for that question."
+                with st.chat_message("assistant"):
+                    st.markdown(answer)
                 st.session_state.messages.append(
-                    {"role": "user", "content": question}
+                    {"role": "assistant", "content": answer, "chunks": []}
                 )
-                with st.chat_message("user"):
-                    st.markdown(question)
+            else:
+                new_idx = len(st.session_state.messages)
+                with st.chat_message("assistant"):
+                    answer = st.write_stream(generate(question, chunks))
+                    answered = NO_ANSWER_SENTINEL not in answer
+                    if answered:
+                        _citations_panel(chunks, idx=new_idx)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": answer,
+                     "chunks": chunks if answered else []}
+                )
 
-                chunks = retrieve(question)
-
-                if not chunks:
-                    answer = "No relevant content found in the knowledge base for that question."
-                    with st.chat_message("assistant"):
-                        st.markdown(answer)
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": answer, "chunks": []}
-                    )
-                else:
-                    new_idx = len(st.session_state.messages)
-                    with st.chat_message("assistant"):
-                        answer = st.write_stream(generate(question, chunks))
-                        answered = NO_ANSWER_SENTINEL not in answer
-                        if answered:
-                            _citations_panel(chunks, idx=new_idx)
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": answer,
-                         "chunks": chunks if answered else []}
-                    )
-
-                st.session_state.query_count += 1
+            st.session_state.query_count += 1
 
 
 if __name__ == "__main__":
