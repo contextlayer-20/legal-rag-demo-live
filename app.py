@@ -18,6 +18,7 @@ from config import (
     QDRANT_URL,
 )
 from rag.generator import generate
+from rag.prompts import NO_ANSWER_SENTINEL
 from rag.retriever import retrieve
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,9 @@ def _apply_styles() -> None:
         [data-testid="stChatInputContainer"] {{
             border-top: 1px solid #1a2535;
         }}
+        [data-testid="stBottomBlockContainer"] {{
+            padding-right: calc(33.333% + 1.5rem) !important;
+        }}
         [data-testid="stExpander"] {{
             background-color: #0f1923;
             border: 1px solid #1a2535 !important;
@@ -118,6 +122,8 @@ def _init_session_state() -> None:
         st.session_state.query_count = 0
     if "ingestion_complete" not in st.session_state:
         st.session_state.ingestion_complete = False
+    if "pending_question" not in st.session_state:
+        st.session_state.pending_question = None
 
 
 def _citations_panel(chunks: list[dict], idx: int | str) -> None:
@@ -205,12 +211,28 @@ def main() -> None:
         "*Ask questions against the knowledge base. "
         "Every answer includes a source citation you can verify.*"
     )
+    st.info(
+        "This demo indexes 5 synthetic legal documents — an NDA, service agreement, "
+        "employment contract, IP assignment, and privacy policy. "
+        "Ask any question about their contents."
+    )
 
     if not st.session_state.ingestion_complete:
         if not _collection_has_points():
             with st.spinner("Loading knowledge base…"):
                 _run_ingestion()
         st.session_state.ingestion_complete = True
+
+    limit_reached = (
+        MAX_QUERIES_PER_SESSION > 0
+        and st.session_state.query_count >= MAX_QUERIES_PER_SESSION
+    )
+
+    typed_question = (
+        st.chat_input("Ask a question about the legal documents…")
+        if not limit_reached
+        else None
+    )
 
     col_chat, col_docs = st.columns([2, 1])
 
@@ -220,18 +242,31 @@ def main() -> None:
     with col_chat:
         _render_history()
 
-        limit_reached = (
-            MAX_QUERIES_PER_SESSION > 0
-            and st.session_state.query_count >= MAX_QUERIES_PER_SESSION
-        )
-
         if limit_reached:
             st.warning(
                 "Demo query limit reached. "
                 "Contact ContextLayer to discuss your use case."
             )
         else:
-            question = st.chat_input("Ask a question about the legal documents…")
+            question = None
+
+            if st.session_state.pending_question:
+                question = st.session_state.pending_question
+                st.session_state.pending_question = None
+
+            if len(st.session_state.messages) == 0 and not question:
+                _suggested = [
+                    "What are the confidentiality obligations in the NDA?",
+                    "Who owns IP created during the engagement?",
+                    "What are the payment terms in the service agreement?",
+                    "What grounds allow early termination of the employment contract?",
+                ]
+                for _q in _suggested:
+                    if st.button(_q):
+                        st.session_state.pending_question = _q
+                        st.rerun()
+
+            question = question or typed_question
 
             if question:
                 st.session_state.messages.append(
@@ -241,15 +276,26 @@ def main() -> None:
                     st.markdown(question)
 
                 chunks = retrieve(question)
-                new_idx = len(st.session_state.messages)
 
-                with st.chat_message("assistant"):
-                    answer: str = st.write_stream(generate(question, chunks))
-                    _citations_panel(chunks, idx=new_idx)
+                if not chunks:
+                    answer = "No relevant content found in the knowledge base for that question."
+                    with st.chat_message("assistant"):
+                        st.markdown(answer)
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": answer, "chunks": []}
+                    )
+                else:
+                    new_idx = len(st.session_state.messages)
+                    with st.chat_message("assistant"):
+                        answer = st.write_stream(generate(question, chunks))
+                        answered = NO_ANSWER_SENTINEL not in answer
+                        if answered:
+                            _citations_panel(chunks, idx=new_idx)
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": answer,
+                         "chunks": chunks if answered else []}
+                    )
 
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": answer, "chunks": chunks}
-                )
                 st.session_state.query_count += 1
 
 
